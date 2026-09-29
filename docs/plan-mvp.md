@@ -126,7 +126,7 @@ Scaffold via Raycast **Create Extension** (or hand-roll `package.json` + `@rayca
 | Step | Done when | Status |
 |---|---|---|
 | A. Scaffold extension + README | `npm run dev` loads command in Raycast | done (`npm run build` / `ray develop` ok) |
-| B. Prefs for key + model | Extension preferences form works | done (in package.json) |
+| B. Prefs for key + model | Configure command stores key/model/tone | done |
 | C. Wire OpenAI + paste-back | Select → hotkey → corrected text in Slack/Notes | done (code) — **you verify in Raycast** |
 | D. Clipboard save/restore | Existing clipboard survives a fix | done (`selection.ts`) |
 | E. Polish errors + README hotkey | Friend can clone and use in <10 min | done (README) |

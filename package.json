@@ -4,7 +4,7 @@
   "title": "Quick Fix",
   "version": "0.1.0",
   "description": "Fix spelling and grammar of selected text using your own OpenAI API key",
-  "icon": "icon-qf2.png",
+  "icon": "icon.png",
   "author": "rolf_wessels",
   "categories": [
     "Productivity"
