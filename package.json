@@ -1,0 +1,50 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "quick-fix",
+  "title": "Quick Fix",
+  "version": "0.1.0",
+  "description": "Fix spelling and grammar of selected text using your own OpenAI API key",
+  "icon": "icon-qf2.png",
+  "author": "rolf_wessels",
+  "categories": [
+    "Productivity"
+  ],
+  "platforms": [
+    "macOS"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "fix-grammar",
+      "title": "Fix Spelling and Grammar",
+      "description": "Correct spelling and grammar of the selected text, then paste the result",
+      "mode": "no-view"
+    },
+    {
+      "name": "configure",
+      "title": "Configure",
+      "description": "Set OpenAI API key, model, and writing style",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.8",
+    "openai": "^7.23.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.1.1",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "prepublishOnly": "echo \"Use npm run publish for the Raycast Store.\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
