@@ -10,6 +10,8 @@ export interface FixRequest {
   apiKey: string;
   model: string;
   writingStyle: string;
+  /** Optional: backends add laps so slow steps are visible. */
+  timer?: import("../timing").Timer;
 }
 
 export interface Backend {

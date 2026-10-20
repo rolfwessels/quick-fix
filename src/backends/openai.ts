@@ -11,7 +11,7 @@ const MODELS = [
   { title: "GPT-5.6 Terra (balanced, mid-tier)", value: "gpt-5.6-terra" },
 ] as const;
 
-async function fix({ text, apiKey, model, writingStyle }: FixRequest): Promise<string> {
+async function fix({ text, apiKey, model, writingStyle, timer }: FixRequest): Promise<string> {
   const client = new OpenAI({ apiKey });
   const response = await client.chat.completions.create({
     model: model || DEFAULT_MODEL,
@@ -23,6 +23,7 @@ async function fix({ text, apiKey, model, writingStyle }: FixRequest): Promise<s
     reasoning_effort: "none",
   });
 
+  timer?.lap("api-call");
   const fixed = response.choices[0]?.message?.content?.trim();
   if (!fixed) {
     throw new Error("Empty response from OpenAI");

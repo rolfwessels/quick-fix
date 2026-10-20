@@ -47,10 +47,12 @@ async function prepareWorkspace(sdk: Awaited<ReturnType<typeof loadSdk>>) {
   return { cwd, store: new sdk.JsonlLocalAgentStore(storeDir) };
 }
 
-async function fix({ text, apiKey, model, writingStyle }: FixRequest): Promise<string> {
+async function fix({ text, apiKey, model, writingStyle, timer }: FixRequest): Promise<string> {
   const sdk = await loadSdk();
+  timer?.lap("sdk-load");
   const id = model || DEFAULT_MODEL;
   const { cwd, store } = await prepareWorkspace(sdk);
+  timer?.lap("workspace");
   const prompt = `${buildSystemPrompt(writingStyle)}\nDo not use any tools or edit any files.\n\nText:\n${text}`;
 
   const result = await sdk.Agent.prompt(prompt, {
@@ -58,6 +60,11 @@ async function fix({ text, apiKey, model, writingStyle }: FixRequest): Promise<s
     model: { id, params: MODEL_PARAMS[id] },
     local: { cwd, store },
   });
+  timer?.lap("agent-run");
+  // Server-reported run time vs our wall time: the gap is SDK/startup overhead, not model time.
+  timer?.note("sdk-durationMs", result.durationMs);
+  timer?.note("outputTokens", result.usage?.outputTokens);
+  timer?.note("reasoningTokens", result.usage?.reasoningTokens);
 
   if (result.status !== "finished") {
     throw new Error(result.error?.message ?? `Cursor run ${result.status}`);
