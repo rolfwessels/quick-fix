@@ -1,4 +1,4 @@
-import { Agent, Cursor, JsonlLocalAgentStore, type ModelSelection } from "../vendor/cursor-sdk";
+import type { ModelSelection } from "../vendor/cursor-sdk";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,28 +28,32 @@ const MODEL_PARAMS: Record<string, ModelSelection["params"]> = {
 
 let configured = false;
 
-/** Corporate TLS proxies (Netskope) often break HTTP/2, so force HTTP/1.1 + SSE. Global and one-off. */
-function configureSdk(): void {
-  if (configured) return;
-  Cursor.configure({ local: { useHttp1ForAgent: true } });
-  configured = true;
+/** The SDK bundle is ~8 MB. Load it only when a Cursor fix runs, so other commands stay under Raycast's 100 MB heap. */
+async function loadSdk() {
+  const sdk = await import("../vendor/cursor-sdk");
+  if (!configured) {
+    // Corporate TLS proxies (Netskope) often break HTTP/2, so force HTTP/1.1 + SSE. Global and one-off.
+    sdk.Cursor.configure({ local: { useHttp1ForAgent: true } });
+    configured = true;
+  }
+  return sdk;
 }
 
-async function prepareWorkspace(): Promise<{ cwd: string; store: JsonlLocalAgentStore }> {
+async function prepareWorkspace(sdk: Awaited<ReturnType<typeof loadSdk>>) {
   const root = await mkdtemp(join(tmpdir(), "quick-fix-"));
   const cwd = join(root, "work");
   const storeDir = join(root, "store");
   await Promise.all([mkdir(cwd), mkdir(storeDir)]);
-  return { cwd, store: new JsonlLocalAgentStore(storeDir) };
+  return { cwd, store: new sdk.JsonlLocalAgentStore(storeDir) };
 }
 
 async function fix({ text, apiKey, model, writingStyle }: FixRequest): Promise<string> {
-  configureSdk();
+  const sdk = await loadSdk();
   const id = model || DEFAULT_MODEL;
-  const { cwd, store } = await prepareWorkspace();
+  const { cwd, store } = await prepareWorkspace(sdk);
   const prompt = `${buildSystemPrompt(writingStyle)}\nDo not use any tools or edit any files.\n\nText:\n${text}`;
 
-  const result = await Agent.prompt(prompt, {
+  const result = await sdk.Agent.prompt(prompt, {
     apiKey,
     model: { id, params: MODEL_PARAMS[id] },
     local: { cwd, store },

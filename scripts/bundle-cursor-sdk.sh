@@ -8,5 +8,5 @@ cd "$(dirname "$0")/.."
 npx esbuild node_modules/@cursor/sdk/dist/bundled/index.js \
   --bundle --platform=node --format=cjs \
   --alias:bun:sqlite=./src/stubs/bun-sqlite.ts \
-  --define:import.meta.require=require \
+  --define:import.meta.require=require --minify \
   --outfile=src/vendor/cursor-sdk.js --log-level=warning
