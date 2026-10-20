@@ -1,15 +1,17 @@
 import { Clipboard, showHUD, showToast, Toast } from "@raycast/api";
-import { fixGrammar } from "./openai";
+import { getBackend } from "./backends";
 import { readSelectedText } from "./selection";
 import { loadSettings } from "./settings";
 
 export default async function Command() {
   const settings = await loadSettings();
+  const backend = getBackend(settings.backend);
+  const { apiKey, model } = settings.backends[backend.id];
 
-  if (!settings.openaiApiKey.trim()) {
+  if (!apiKey.trim()) {
     await showToast({
       style: Toast.Style.Failure,
-      title: "OpenAI API key missing",
+      title: `${backend.title} API key missing`,
       message: "Run Configure and paste your key",
     });
     return;
@@ -42,7 +44,7 @@ export default async function Command() {
   });
 
   try {
-    const fixed = await fixGrammar(selectedText, settings.openaiApiKey, settings.model, settings.writingStyle);
+    const fixed = await backend.fix({ text: selectedText, apiKey, model, writingStyle: settings.writingStyle });
     await Clipboard.paste(fixed);
     toast.hide();
     await showHUD("Fixed");

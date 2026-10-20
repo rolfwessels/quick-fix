@@ -28,6 +28,7 @@
     }
   ],
   "dependencies": {
+    "@cursor/sdk": "^1.0.38",
     "@raycast/api": "^1.104.8",
     "openai": "^7.23.0"
   },
@@ -35,6 +36,7 @@
     "@raycast/eslint-config": "^2.1.1",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
+    "esbuild": "^0.28.2",
     "eslint": "^9.22.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2"
@@ -45,6 +47,11 @@
     "fix-lint": "ray lint --fix",
     "lint": "ray lint",
     "prepublishOnly": "echo \"Use npm run publish for the Raycast Store.\" && exit 1",
-    "publish": "npx @raycast/api@latest publish"
+    "publish": "npx @raycast/api@latest publish",
+    "bundle:sdk": "bash scripts/bundle-cursor-sdk.sh",
+    "postinstall": "npm run bundle:sdk",
+    "prebuild": "test -f src/vendor/cursor-sdk.js || npm run bundle:sdk",
+    "predev": "test -f src/vendor/cursor-sdk.js || npm run bundle:sdk",
+    "prelint": "test -f src/vendor/cursor-sdk.js || npm run bundle:sdk"
   }
 }
