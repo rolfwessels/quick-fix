@@ -1,5 +1,5 @@
 import type { ModelSelection } from "../vendor/cursor-sdk";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildSystemPrompt } from "../writing-style";
@@ -34,6 +34,10 @@ async function loadSdk() {
   if (!configured) {
     // Corporate TLS proxies (Netskope) often break HTTP/2, so force HTTP/1.1 + SSE. Global and one-off.
     sdk.Cursor.configure({ local: { useHttp1ForAgent: true } });
+    // Skips the SDK's GET /v1/models check (~1.5-3s per run). Undocumented env var: drop this if a SDK update ignores it.
+    process.env.CURSOR_SDK_LOCAL_MODEL_CATALOG_JSON ??= JSON.stringify(
+      MODELS.map(({ title, value }) => ({ id: value, displayName: title })),
+    );
     configured = true;
   }
   return sdk;
@@ -44,22 +48,24 @@ async function prepareWorkspace(sdk: Awaited<ReturnType<typeof loadSdk>>) {
   const cwd = join(root, "work");
   const storeDir = join(root, "store");
   await Promise.all([mkdir(cwd), mkdir(storeDir)]);
-  return { cwd, store: new sdk.JsonlLocalAgentStore(storeDir) };
+  return { root, cwd, store: new sdk.JsonlLocalAgentStore(storeDir) };
 }
 
 async function fix({ text, apiKey, model, writingStyle, timer }: FixRequest): Promise<string> {
   const sdk = await loadSdk();
   timer?.lap("sdk-load");
   const id = model || DEFAULT_MODEL;
-  const { cwd, store } = await prepareWorkspace(sdk);
+  const { root, cwd, store } = await prepareWorkspace(sdk);
   timer?.lap("workspace");
-  const prompt = `${buildSystemPrompt(writingStyle)}\nDo not use any tools or edit any files.\n\nText:\n${text}`;
+  const prompt = `${buildSystemPrompt(writingStyle)}\n\nText:\n${text}`;
 
   const result = await sdk.Agent.prompt(prompt, {
     apiKey,
     model: { id, params: MODEL_PARAMS[id] },
+    // No built-in tools: the selected text is untrusted, and the coding toolset adds ~8k input tokens.
+    tools: [],
     local: { cwd, store },
-  });
+  }).finally(() => rm(root, { recursive: true, force: true }).catch(() => undefined));
   timer?.lap("agent-run");
   // Server-reported run time vs our wall time: the gap is SDK/startup overhead, not model time.
   timer?.note("sdk-durationMs", result.durationMs);

@@ -3,7 +3,7 @@
   "name": "quick-fix",
   "title": "Quick Fix",
   "version": "0.1.0",
-  "description": "Fix spelling and grammar of selected text using your own OpenAI API key",
+  "description": "Fix spelling and grammar of selected text using your own OpenAI or Cursor API key",
   "icon": "icon.png",
   "author": "rolf_wessels",
   "categories": [
@@ -23,7 +23,7 @@
     {
       "name": "configure",
       "title": "Configure",
-      "description": "Set OpenAI API key, model, and writing style",
+      "description": "Set backend, API key, model, and writing style",
       "mode": "view"
     }
   ],

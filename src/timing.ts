@@ -41,14 +41,3 @@ export function createTimer(name: string): Timer {
     },
   };
 }
-
-/** Appends one diagnostic line to the same log file the timer uses. Never throws. */
-export function logLine(message: string): void {
-  const line = `[quick-fix] ${new Date().toISOString()} ${message}`;
-  console.log(line);
-  try {
-    appendFileSync(join(tmpdir(), "quick-fix-timing.log"), `${line}\n`);
-  } catch {
-    // ignore
-  }
-}

@@ -36,7 +36,7 @@ Not a goal for MVP: pixel-match Pro’s double-tap Right Shift / Accessibility f
 - Double-tap modifier / zero Raycast chrome
 - Preserve rich formatting (Slack/Notion)
 - Diff “what changed” UI
-- Multi-provider (Anthropic, OpenRouter, Ollama)
+- Further providers (Anthropic, OpenRouter, Ollama). OpenAI and Cursor are supported, see plan-cursor-backend.md
 - Tone / improve-writing / translate suite
 - Streaming token HUD
 - Raycast Store publish (local `npm run dev` first)
