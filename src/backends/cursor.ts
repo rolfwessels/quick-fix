@@ -1,0 +1,94 @@
+import type { ModelSelection } from "../vendor/cursor-sdk";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildSystemPrompt } from "../writing-style";
+import { Backend, FixRequest } from "./types";
+
+const DEFAULT_MODEL = "claude-haiku-5-5";
+
+/**
+ * Hard-coded for now: Cursor model ids change often. Later, fill this from `Cursor.models.list()`.
+ * Measured on the spike: Haiku and Luna ~3-5s, Composer 2.5 ~8-17s.
+ */
+const MODELS = [
+  { title: "Claude Haiku 5.5 (fast)", value: "claude-haiku-5-5" },
+  { title: "GPT-5.6 Luna (fast)", value: "gpt-5.6-luna" },
+  { title: "Composer 2.5 (slower)", value: "composer-2.5" },
+] as const;
+
+/** Keep reasoning off. Parameter ids differ per model; unknown models get no params. */
+const MODEL_PARAMS: Record<string, ModelSelection["params"]> = {
+  "claude-haiku-5-5": [
+    { id: "thinking", value: "false" },
+    { id: "reasoning_effort", value: "low" },
+  ],
+  "gpt-5.6-luna": [{ id: "reasoning", value: "none" }],
+};
+
+let configured = false;
+
+/** The SDK bundle is ~8 MB. Load it only when a Cursor fix runs, so other commands stay under Raycast's 100 MB heap. */
+async function loadSdk() {
+  const sdk = await import("../vendor/cursor-sdk");
+  if (!configured) {
+    // Corporate TLS proxies (Netskope) often break HTTP/2, so force HTTP/1.1 + SSE. Global and one-off.
+    sdk.Cursor.configure({ local: { useHttp1ForAgent: true } });
+    // Skips the SDK's GET /v1/models check (~1.5-3s per run). Undocumented env var: drop this if a SDK update ignores it.
+    process.env.CURSOR_SDK_LOCAL_MODEL_CATALOG_JSON ??= JSON.stringify(
+      MODELS.map(({ title, value }) => ({ id: value, displayName: title })),
+    );
+    configured = true;
+  }
+  return sdk;
+}
+
+async function prepareWorkspace(sdk: Awaited<ReturnType<typeof loadSdk>>) {
+  const root = await mkdtemp(join(tmpdir(), "quick-fix-"));
+  const cwd = join(root, "work");
+  const storeDir = join(root, "store");
+  await Promise.all([mkdir(cwd), mkdir(storeDir)]);
+  return { root, cwd, store: new sdk.JsonlLocalAgentStore(storeDir) };
+}
+
+async function fix({ text, apiKey, model, writingStyle, timer }: FixRequest): Promise<string> {
+  const sdk = await loadSdk();
+  timer?.lap("sdk-load");
+  const id = model || DEFAULT_MODEL;
+  const { root, cwd, store } = await prepareWorkspace(sdk);
+  timer?.lap("workspace");
+  const prompt = `${buildSystemPrompt(writingStyle)}\n\nText:\n${text}`;
+
+  const result = await sdk.Agent.prompt(prompt, {
+    apiKey,
+    model: { id, params: MODEL_PARAMS[id] },
+    // No built-in tools: the selected text is untrusted, and the coding toolset adds ~8k input tokens.
+    tools: [],
+    local: { cwd, store },
+  }).finally(() => rm(root, { recursive: true, force: true }).catch(() => undefined));
+  timer?.lap("agent-run");
+  // Server-reported run time vs our wall time: the gap is SDK/startup overhead, not model time.
+  timer?.note("sdk-durationMs", result.durationMs);
+  timer?.note("outputTokens", result.usage?.outputTokens);
+  timer?.note("reasoningTokens", result.usage?.reasoningTokens);
+
+  if (result.status !== "finished") {
+    throw new Error(result.error?.message ?? `Cursor run ${result.status}`);
+  }
+  const fixed = result.result?.trim();
+  if (!fixed) {
+    throw new Error("Empty response from Cursor");
+  }
+  return fixed;
+}
+
+export const cursorBackend: Backend = {
+  id: "cursor",
+  title: "Cursor",
+  keyLabel: "Cursor API Key",
+  keyPlaceholder: "Cursor Dashboard → Integrations",
+  privacyNote: "Requests go to Cursor's API using an agent with no repo access.",
+  defaultModel: DEFAULT_MODEL,
+  models: MODELS,
+  fix,
+};

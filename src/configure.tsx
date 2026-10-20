@@ -1,64 +1,86 @@
 import { Action, ActionPanel, Form, showToast, Toast } from "@raycast/api";
 import { useEffect, useState } from "react";
+import { BACKENDS, getBackend } from "./backends";
+import { BackendId } from "./backends/types";
+import { loadSettings, resetWritingStyle, saveSettings, Settings } from "./settings";
 import { DEFAULT_WRITING_STYLE } from "./writing-style";
-import { loadSettings, MODEL_OPTIONS, resetWritingStyle, saveSettings, Settings } from "./settings";
 
 export default function Command() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadSettings().then((value) => {
-      setSettings(value);
-      setIsLoading(false);
-    });
+    loadSettings().then(setSettings);
   }, []);
 
-  async function handleSubmit(values: { openaiApiKey: string; model: string; writingStyle: string }) {
-    await saveSettings({
-      openaiApiKey: values.openaiApiKey,
-      model: values.model,
-      writingStyle: values.writingStyle,
-    });
-    setSettings({
-      openaiApiKey: values.openaiApiKey.trim(),
-      model: values.model,
-      writingStyle: values.writingStyle,
-    });
+  const backend = getBackend(settings?.backend);
+  const current = settings?.backends[backend.id];
+
+  function update(patch: Partial<Settings>) {
+    setSettings((value) => (value ? { ...value, ...patch } : value));
+  }
+
+  function updateBackend(patch: Partial<{ apiKey: string; model: string }>) {
+    setSettings((value) =>
+      value
+        ? { ...value, backends: { ...value.backends, [backend.id]: { ...value.backends[backend.id], ...patch } } }
+        : value,
+    );
+  }
+
+  async function handleSave() {
+    if (!settings) return;
+    await saveSettings(settings);
+    // Read back once: a save was seen to leave the previous model in place, so say so instead of failing silently.
+    const stored = await loadSettings();
+    const wanted = settings.backends[settings.backend].model;
+    if (stored.backend !== settings.backend || stored.backends[stored.backend].model !== wanted) {
+      await showToast({ style: Toast.Style.Failure, title: "Settings not saved", message: "Try Save Settings again" });
+      return;
+    }
     await showToast({ style: Toast.Style.Success, title: "Settings saved" });
   }
 
   async function handleResetStyle() {
     const writingStyle = await resetWritingStyle();
-    setSettings((current) => (current ? { ...current, writingStyle } : current));
+    update({ writingStyle });
     await showToast({ style: Toast.Style.Success, title: "Writing style reset" });
   }
 
   return (
     <Form
-      isLoading={isLoading}
+      isLoading={!settings}
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Save Settings" onSubmit={handleSubmit} />
+          <Action.SubmitForm title="Save Settings" onSubmit={handleSave} />
           <Action title="Reset Writing Style to Default" onAction={handleResetStyle} />
         </ActionPanel>
       }
     >
-      <Form.Description text="API key and model are stored on this Mac only. Requests go straight to OpenAI." />
+      <Form.Dropdown
+        id="backend"
+        title="Backend"
+        value={backend.id}
+        onChange={(id) => update({ backend: id as BackendId })}
+      >
+        {BACKENDS.map((b) => (
+          <Form.Dropdown.Item key={b.id} title={b.title} value={b.id} />
+        ))}
+      </Form.Dropdown>
+      <Form.Description text={`API key and model are stored on this Mac only. ${backend.privacyNote}`} />
       <Form.PasswordField
-        id="openaiApiKey"
-        title="OpenAI API Key"
-        placeholder="sk-…"
-        value={settings?.openaiApiKey ?? ""}
-        onChange={(openaiApiKey) => setSettings((current) => (current ? { ...current, openaiApiKey } : current))}
+        id={`${backend.id}ApiKey`}
+        title={backend.keyLabel}
+        placeholder={backend.keyPlaceholder}
+        value={current?.apiKey ?? ""}
+        onChange={(apiKey) => updateBackend({ apiKey })}
       />
       <Form.Dropdown
-        id="model"
+        id={`${backend.id}Model`}
         title="Model"
-        value={settings?.model ?? "gpt-6-luna"}
-        onChange={(model) => setSettings((current) => (current ? { ...current, model } : current))}
+        value={current?.model ?? backend.defaultModel}
+        onChange={(model) => updateBackend({ model })}
       >
-        {MODEL_OPTIONS.map((option) => (
+        {backend.models.map((option) => (
           <Form.Dropdown.Item key={option.value} title={option.title} value={option.value} />
         ))}
       </Form.Dropdown>
@@ -68,9 +90,9 @@ export default function Command() {
         title="Tone of voice"
         info="Applied on every Fix Spelling and Grammar run."
         value={settings?.writingStyle ?? DEFAULT_WRITING_STYLE}
-        onChange={(writingStyle) => setSettings((current) => (current ? { ...current, writingStyle } : current))}
+        onChange={(writingStyle) => update({ writingStyle })}
       />
-      <Form.Description text="Reset Writing Style restores the built-in default. Save Settings keeps API key, model, and tone together." />
+      <Form.Description text="Reset Writing Style restores the built-in default. Save Settings keeps the backend, both keys, models and tone together." />
     </Form>
   );
 }

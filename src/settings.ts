@@ -1,45 +1,53 @@
 import { LocalStorage } from "@raycast/api";
+import { BACKENDS, getBackend } from "./backends";
+import { BackendId } from "./backends/types";
 import { DEFAULT_WRITING_STYLE, loadWritingStyle, saveWritingStyle } from "./writing-style";
 
-const API_KEY = "openaiApiKey";
-const MODEL = "model";
+const BACKEND = "backend";
+// OpenAI keeps its original storage keys, so existing installs need no migration.
+const API_KEY_STORAGE: Record<BackendId, string> = { openai: "openaiApiKey", cursor: "cursorApiKey" };
+const MODEL_STORAGE: Record<BackendId, string> = { openai: "model", cursor: "cursorModel" };
 
-/** Current OpenAI flagship text models (https://platform.openai.com/docs/models). */
-export const DEFAULT_MODEL = "gpt-6-luna";
-
-export const MODEL_OPTIONS = [
-  { title: "GPT-6 Luna (fast, cheap)", value: "gpt-6-luna" },
-  { title: "GPT-6 Sol (balanced)", value: "gpt-6-sol" },
-  { title: "GPT-5.6 Terra (balanced, mid-tier)", value: "gpt-5.6-terra" },
-] as const;
-
-const KNOWN_MODELS = new Set<string>(MODEL_OPTIONS.map((option) => option.value));
+export interface BackendSettings {
+  apiKey: string;
+  model: string;
+}
 
 export interface Settings {
-  openaiApiKey: string;
-  model: string;
+  backend: BackendId;
+  backends: Record<BackendId, BackendSettings>;
   writingStyle: string;
 }
 
 export async function loadSettings(): Promise<Settings> {
-  const [openaiApiKey, model, writingStyle] = await Promise.all([
-    LocalStorage.getItem<string>(API_KEY),
-    LocalStorage.getItem<string>(MODEL),
+  const [backend, writingStyle, ...stored] = await Promise.all([
+    LocalStorage.getItem<string>(BACKEND),
     loadWritingStyle(LocalStorage.getItem),
+    ...BACKENDS.flatMap((b) => [
+      LocalStorage.getItem<string>(API_KEY_STORAGE[b.id]),
+      LocalStorage.getItem<string>(MODEL_STORAGE[b.id]),
+    ]),
   ]);
 
-  return {
-    openaiApiKey: openaiApiKey ?? "",
-    model: resolveModel(model),
-    writingStyle,
-  };
+  const backends = {} as Record<BackendId, BackendSettings>;
+  BACKENDS.forEach((b, index) => {
+    backends[b.id] = {
+      apiKey: stored[index * 2] ?? "",
+      model: resolveModel(b.id, stored[index * 2 + 1]),
+    };
+  });
+
+  return { backend: getBackend(backend).id, backends, writingStyle };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await Promise.all([
-    LocalStorage.setItem(API_KEY, settings.openaiApiKey.trim()),
-    LocalStorage.setItem(MODEL, resolveModel(settings.model)),
+    LocalStorage.setItem(BACKEND, settings.backend),
     saveWritingStyle(LocalStorage.setItem, settings.writingStyle),
+    ...BACKENDS.flatMap((b) => [
+      LocalStorage.setItem(API_KEY_STORAGE[b.id], settings.backends[b.id].apiKey.trim()),
+      LocalStorage.setItem(MODEL_STORAGE[b.id], resolveModel(b.id, settings.backends[b.id].model)),
+    ]),
   ]);
 }
 
@@ -48,10 +56,11 @@ export async function resetWritingStyle(): Promise<string> {
   return DEFAULT_WRITING_STYLE;
 }
 
-function resolveModel(stored: string | undefined): string {
+function resolveModel(id: BackendId, stored: string | undefined): string {
+  const backend = getBackend(id);
   const value = stored?.trim();
-  if (value && KNOWN_MODELS.has(value)) {
+  if (value && backend.models.some((model) => model.value === value)) {
     return value;
   }
-  return DEFAULT_MODEL;
+  return backend.defaultModel;
 }
