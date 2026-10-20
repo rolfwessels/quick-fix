@@ -96,3 +96,28 @@ Notes:
 3. For the 403 on the REST route, ask whether cloud agents are enabled for the account or team. Only needed if the local SDK route is not viable.
 4. If Cursor is not viable, the `Backend` interface still pays off: add another approved provider behind it.
 5. Once a route works, build per the Steps section above.
+
+## Update: HTTP/2 workaround found (2026-10-20)
+
+Cause of the h2/ALPN error: Netskope (`ca.impact.goskope.com`) intercepts TLS to `api2.cursor.sh` and does not negotiate HTTP/2. A restart does not help.
+
+Fix: call this once before creating any agent. It makes the SDK use HTTP/1.1 + SSE.
+
+```ts
+Cursor.configure({ local: { useHttp1ForAgent: true } });
+```
+
+Note it is a global setting. Passing `useHttp1ForAgent` inside `Agent.prompt({ local })` did NOT work.
+
+Local SDK route now works with an empty temp cwd, no files written, output was only the corrected text:
+
+| Model | Time |
+|---|---|
+| `composer-2.5` | ~14s |
+| `gpt-5.6-luna` | ~5.4s |
+| `claude-haiku-5-5` | ~4.0s |
+
+Decisions:
+- Go with option A (`@cursor/sdk` local agent). Always set `useHttp1ForAgent: true` (harmless off the proxy).
+- Default Cursor model: `claude-haiku-5-5`, then `gpt-5.6-luna`. Avoid `composer-2.5` (too slow for a hotkey).
+- Still to check: that it loads inside Raycast's runtime (Node version, native binaries, SQLite store; fall back to `JsonlLocalAgentStore`).
